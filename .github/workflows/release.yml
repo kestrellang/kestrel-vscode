@@ -1,0 +1,129 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  vsix:
+    strategy:
+      matrix:
+        include:
+          - os: macos-14
+            vsce_target: darwin-arm64
+            exe: kestrel-lsp
+          - os: macos-13
+            vsce_target: darwin-x64
+            exe: kestrel-lsp
+          - os: ubuntu-latest
+            vsce_target: linux-x64
+            exe: kestrel-lsp
+          - os: windows-latest
+            vsce_target: win32-x64
+            exe: kestrel-lsp.exe
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout extension
+        uses: actions/checkout@v4
+        with:
+          path: kestrel-vscode
+
+      - name: Checkout Kestrel
+        uses: actions/checkout@v4
+        with:
+          repository: kestrellang/kestrel
+          path: kestrel
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            kestrel/target
+          key: ${{ matrix.vsce_target }}-cargo-lsp-${{ hashFiles('kestrel/Cargo.lock') }}
+
+      - name: Install OpenSSL (macOS)
+        if: runner.os == 'macOS'
+        run: brew install openssl@3
+
+      - name: Install OpenSSL (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
+
+      - name: Build kestrel-lsp
+        working-directory: kestrel
+        run: cargo build --release -p kestrel-lsp
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install extension dependencies
+        working-directory: kestrel-vscode
+        run: npm ci
+
+      - name: Compile extension
+        working-directory: kestrel-vscode
+        run: npm run compile
+
+      - name: Stage LSP binary
+        shell: bash
+        env:
+          VSCE_TARGET: ${{ matrix.vsce_target }}
+          EXE_NAME: ${{ matrix.exe }}
+        run: |
+          dst="kestrel-vscode/server/${VSCE_TARGET}"
+          mkdir -p "$dst"
+          cp "kestrel/target/release/${EXE_NAME}" "$dst/${EXE_NAME}"
+          chmod +x "$dst/${EXE_NAME}" || true
+
+      - name: Package .vsix
+        working-directory: kestrel-vscode
+        env:
+          VSCE_TARGET: ${{ matrix.vsce_target }}
+        run: npx --yes @vscode/vsce@latest package --target "$VSCE_TARGET" --out "kestrel-$VSCE_TARGET.vsix"
+
+      - name: Upload .vsix
+        uses: actions/upload-artifact@v4
+        with:
+          name: vsix-${{ matrix.vsce_target }}
+          path: kestrel-vscode/kestrel-${{ matrix.vsce_target }}.vsix
+
+  release:
+    needs: [vsix]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -la artifacts/
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG_NAME" \
+            --title "Kestrel VS Code $TAG_NAME" \
+            --generate-notes \
+            artifacts/kestrel-*.vsix
