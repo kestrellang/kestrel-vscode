@@ -17,6 +17,9 @@ import {
 let client: LanguageClient | undefined;
 
 export async function activate(context: ExtensionContext) {
+  const log = window.createOutputChannel("Kestrel Language Server");
+  log.appendLine(`[kestrel] activate() called`);
+
   const config = workspace.getConfiguration("kestrel");
   // Resolve order:
   //   1. `kestrel.lsp.path` setting (explicit override; absolute or PATH name)
@@ -25,6 +28,9 @@ export async function activate(context: ExtensionContext) {
   const settingPath = (config.get<string>("lsp.path") ?? "").trim();
   const bundled = resolveBundledLsp(context);
   const command = settingPath || bundled || "kestrel-lsp";
+  log.appendLine(`[kestrel] lsp.path setting: "${settingPath}"`)
+  log.appendLine(`[kestrel] bundled binary: ${bundled ?? "(none)"}`)
+  log.appendLine(`[kestrel] resolved command: ${command}`);
 
   const serverOptions: ServerOptions = {
     run: { command, transport: TransportKind.stdio },
@@ -33,6 +39,8 @@ export async function activate(context: ExtensionContext) {
 
   const stdlibPath = config.get<string>("stdlibPath") ?? "";
   const flockCachePath = config.get<string>("flockCachePath") ?? "";
+  log.appendLine(`[kestrel] stdlibPath: "${stdlibPath}"`);
+  log.appendLine(`[kestrel] workspace folders: ${workspace.workspaceFolders?.map(f => f.uri.fsPath).join(", ") ?? "(none)"}`);
 
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ scheme: "file", language: "kestrel" }],
@@ -47,7 +55,7 @@ export async function activate(context: ExtensionContext) {
       stdlibPath: stdlibPath || null,
       flockCachePath: flockCachePath || null,
     },
-    outputChannel: window.createOutputChannel("Kestrel Language Server"),
+    outputChannel: log,
   };
 
   client = new LanguageClient(
@@ -104,8 +112,11 @@ export async function activate(context: ExtensionContext) {
   );
 
   try {
+    log.appendLine(`[kestrel] starting language client...`);
     await client.start();
+    log.appendLine(`[kestrel] language client started successfully`);
   } catch (err) {
+    log.appendLine(`[kestrel] language client FAILED: ${err}`);
     window.showErrorMessage(
       `Failed to start kestrel-lsp ('${command}'). ` +
         `Set 'kestrel.lsp.path' to a built binary or run 'cargo build -p kestrel-lsp'. ` +

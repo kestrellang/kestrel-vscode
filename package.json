@@ -7,14 +7,14 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/jkpdino/kestrel.git",
-    "directory": "editors/vscode"
+    "url": "https://github.com/kestrellang/kestrel.git",
+    "directory": "external/kestrel-vscode"
   },
   "engines": {
     "vscode": "^1.85.0"
   },
   "categories": ["Programming Languages"],
-  "activationEvents": ["onLanguage:kestrel"],
+  "activationEvents": ["onLanguage:kestrel", "workspaceContains:**/*.ks", "workspaceContains:flock.toml"],
   "main": "./out/extension.js",
   "contributes": {
     "languages": [
