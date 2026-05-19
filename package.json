@@ -13,7 +13,7 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "icon": "images/icon.png",
+  "icon": "images/kestrel-head.png",
   "categories": ["Programming Languages"],
   "activationEvents": ["onLanguage:kestrel", "workspaceContains:**/*.ks", "workspaceContains:flock.toml"],
   "main": "./out/extension.js",
